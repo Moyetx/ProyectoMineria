@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Base de datos local de usuarios (se genera en tiempo de ejecucion)
+usuarios.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Tests
+.pytest_cache/
+
+# Sistema
+.DS_Store

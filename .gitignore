@@ -16,3 +16,5 @@ usuarios.db
 
 # Sistema
 .DS_Store
+
+.nicegui/

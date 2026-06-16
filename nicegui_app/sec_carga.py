@@ -100,15 +100,25 @@ def _cargar_bytes(nombre: str, contenido: bytes, vista) -> None:
     _almacenar(df, nombre, vista)
 
 
-def _manejar_upload(e, vista) -> None:
-    """Lee el contenido del archivo subido de forma segura y lo carga."""
+async def _manejar_upload(e, vista) -> None:
+    """Lee el contenido del archivo subido de forma segura y lo carga.
+
+    Compatible con las dos APIs de NiceGUI:
+      - 3.x: ``e.file`` con ``await e.file.read()`` (asincrono)
+      - 2.x: ``e.content.read()`` con ``e.name`` (sincrono)
+    """
     try:
-        contenido = e.content.read()
+        if hasattr(e, "file"):                 # NiceGUI 3.x
+            nombre = e.file.name
+            contenido = await e.file.read()
+        else:                                  # NiceGUI 2.x
+            nombre = e.name
+            contenido = e.content.read()
     except Exception as ex:  # noqa: BLE001
         traceback.print_exc()
         ui.notify(f"No se pudo leer el archivo subido: {ex}", type="negative")
         return
-    _cargar_bytes(e.name, contenido, vista)
+    _cargar_bytes(nombre, contenido, vista)
 
 
 def render() -> None:

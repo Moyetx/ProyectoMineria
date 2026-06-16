@@ -7,6 +7,7 @@ Tres orígenes de datos:
 """
 
 import io
+import traceback
 from pathlib import Path
 
 import numpy as np
@@ -60,17 +61,54 @@ def _generar_dataset() -> pd.DataFrame:
     return df
 
 
-def _cargar_bytes(nombre: str, contenido: bytes, vista) -> None:
+def _leer_csv_robusto(contenido: bytes) -> pd.DataFrame:
+    """Lee un CSV detectando separador (, ; tab) y probando varios encodings."""
+    ultimo_error = None
+    for enc in ("utf-8-sig", "latin-1"):
+        try:
+            # sep=None + engine='python' auto-detecta el separador
+            return pd.read_csv(io.BytesIO(contenido), sep=None, engine="python", encoding=enc)
+        except Exception as e:  # noqa: BLE001
+            ultimo_error = e
+    # Ultimo intento: lectura estandar con coma
     try:
-        if nombre.lower().endswith(".csv"):
-            df = pd.read_csv(io.BytesIO(contenido))
-        elif nombre.lower().endswith((".xlsx", ".xls")):
-            df = pd.read_excel(io.BytesIO(contenido))
-        else:
-            ui.notify("Formato no soportado (usa CSV/XLSX).", type="negative"); return
+        return pd.read_csv(io.BytesIO(contenido))
     except Exception as e:  # noqa: BLE001
-        ui.notify(f"Error al leer: {e}", type="negative"); return
+        raise ultimo_error or e
+
+
+def _cargar_bytes(nombre: str, contenido: bytes, vista) -> None:
+    """Convierte los bytes subidos en DataFrame y lo almacena (siempre avisa)."""
+    if not contenido:
+        ui.notify("El archivo llegó vacío. Vuelve a intentarlo.", type="negative")
+        return
+    try:
+        low = nombre.lower()
+        if low.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(io.BytesIO(contenido))
+        else:  # cualquier otro caso lo tratamos como CSV/texto
+            df = _leer_csv_robusto(contenido)
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()  # detalle completo en la terminal
+        ui.notify(f"Error al leer '{nombre}': {e}", type="negative")
+        return
+
+    if df is None or df.empty:
+        ui.notify("El archivo no contiene datos legibles.", type="negative")
+        return
+
     _almacenar(df, nombre, vista)
+
+
+def _manejar_upload(e, vista) -> None:
+    """Lee el contenido del archivo subido de forma segura y lo carga."""
+    try:
+        contenido = e.content.read()
+    except Exception as ex:  # noqa: BLE001
+        traceback.print_exc()
+        ui.notify(f"No se pudo leer el archivo subido: {ex}", type="negative")
+        return
+    _cargar_bytes(e.name, contenido, vista)
 
 
 def render() -> None:
@@ -115,8 +153,9 @@ def render() -> None:
             if origen.value == "Subir mi archivo":
                 ui.label("Sube tu archivo (CSV o XLSX)").classes("font-semibold")
                 ui.upload(
-                    on_upload=lambda e: _cargar_bytes(e.name, e.content.read(), vista),
+                    on_upload=lambda e: _manejar_upload(e, vista),
                     auto_upload=True,
+                    max_file_size=200 * 1024 * 1024,  # hasta 200 MB
                 ).props('accept=".csv,.xlsx,.xls"').classes("w-full")
 
             elif origen.value == "Generar dataset de prueba":

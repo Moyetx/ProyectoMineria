@@ -1,6 +1,7 @@
 """
 Modulo 2 (NiceGUI): Preprocesamiento y Limpieza.
-Nulos, duplicados, codificacion, outliers y escalamiento.
+Nulos (estrategia POR COLUMNA), duplicados, codificacion, outliers
+(IQR o Z-Score, con cuartiles y listado de valores) y escalamiento.
 """
 
 import pandas as pd
@@ -60,40 +61,69 @@ def _seccion_nulos(refresh):
     if total == 0:
         ui.label("No hay valores nulos.").classes("text-green-600"); return
 
-    # Mapa de calor de nulos
-    fig = px.imshow(df.isna().astype(int).T, aspect="auto",
-                    color_continuous_scale=["#e8f5e9", "#c62828"],
-                    labels=dict(x="Registros", y="Columnas"),
-                    title="Mapa de calor de nulos")
+    # Mapa de calor de nulos: gris claro = presente, rojo OSCURO = nulo (alto contraste)
+    fig = px.imshow(
+        df.isna().astype(int).T, aspect="auto",
+        color_continuous_scale=[(0.0, "#eceff1"), (1.0, "#7f0000")],
+        labels=dict(x="Registros", y="Columnas", color="Nulo"),
+        title="Mapa de calor de nulos (rojo oscuro = nulo)",
+    )
     fig.update_coloraxes(showscale=False)
     ui.plotly(fig).classes("w-full")
 
-    def eliminar():
-        antes = len(df)
-        state.set_df(df.dropna().reset_index(drop=True))
-        ui.notify(f"Eliminadas {antes - len(state.get_df())} filas.", type="positive")
-        refresh.refresh()
+    # --- Estrategia POR COLUMNA ---
+    cols_con_nulos = [c for c in df.columns if df[c].isna().any()]
+    ui.label("Estrategia de imputación por columna").classes("font-semibold mt-2")
+    ui.label(
+        "Elige qué hacer con cada columna. 'Eliminar filas' quita las filas con "
+        "nulos en esa columna; 'No tocar' la deja igual."
+    ).classes("text-xs text-gray-500")
 
-    estrategia = ui.select(["Media", "Mediana", "Moda"], value="Mediana",
-                          label="Estrategia de imputación").classes("w-48")
+    selecciones: dict = {}
+    with ui.column().classes("gap-1 w-full"):
+        for c in cols_con_nulos:
+            es_num = pd.api.types.is_numeric_dtype(df[c])
+            opciones = (["Mediana", "Media", "Moda", "Eliminar filas", "No tocar"]
+                        if es_num else ["Moda", "Eliminar filas", "No tocar"])
+            with ui.row().classes("items-center gap-3 w-full"):
+                ui.label(c).classes("w-48 font-medium")
+                ui.label(f"{int(df[c].isna().sum())} nulos").classes(
+                    "text-xs text-gray-500 w-20")
+                ui.label("numérica" if es_num else "categórica").classes(
+                    "text-xs text-gray-400 w-24")
+                selecciones[c] = ui.select(opciones, value=opciones[0]).props(
+                    "dense outlined").classes("w-44")
 
-    def imputar():
+    def aplicar():
         d = state.get_df().copy()
-        for col in d.columns:
-            if d[col].isna().any():
-                if pd.api.types.is_numeric_dtype(d[col]):
-                    val = {"Media": d[col].mean(), "Mediana": d[col].median()}.get(
-                        estrategia.value, d[col].mode().iloc[0])
-                else:
-                    val = d[col].mode().iloc[0]
-                d[col] = d[col].fillna(val)
+        cols_eliminar = []
+        for c, sel in selecciones.items():
+            if c not in d.columns:
+                continue
+            metodo = sel.value
+            if metodo == "No tocar":
+                continue
+            if metodo == "Eliminar filas":
+                cols_eliminar.append(c)
+            elif metodo == "Media":
+                d[c] = d[c].fillna(d[c].mean())
+            elif metodo == "Mediana":
+                d[c] = d[c].fillna(d[c].median())
+            elif metodo == "Moda":
+                d[c] = d[c].fillna(d[c].mode().iloc[0])
+        filas_antes = len(d)
+        if cols_eliminar:
+            d = d.dropna(subset=cols_eliminar)
+        d = d.reset_index(drop=True)
         state.set_df(d)
-        ui.notify(f"Imputado con {estrategia.value}.", type="positive")
+        quitadas = filas_antes - len(d)
+        msg = "Imputación por columna aplicada."
+        if quitadas:
+            msg += f" Se eliminaron {quitadas} filas."
+        ui.notify(msg, type="positive")
         refresh.refresh()
 
-    with ui.row():
-        ui.button("Eliminar filas con nulos", on_click=eliminar)
-        ui.button("Imputar nulos", on_click=imputar)
+    ui.button("Aplicar imputación por columna", on_click=aplicar).props("color=primary")
 
 
 # --------------------------------------------------------------------------- duplicados
@@ -147,30 +177,70 @@ def _seccion_outliers():
     if not cols:
         ui.label("No hay columnas numéricas.").classes("text-gray-500"); return
 
-    col = ui.select(cols, value=cols[0], label="Variable").classes("w-64")
+    with ui.row().classes("items-center gap-4"):
+        col = ui.select(cols, value=cols[0], label="Variable").classes("w-64")
+        metodo = ui.radio(["IQR", "Z-Score"], value="IQR").props("inline")
 
     @ui.refreshable
     def panel():
         d = state.get_df()
         c = col.value
         s = d[c].dropna()
-        q1, q3 = s.quantile(0.25), s.quantile(0.75)
+        q1, q2, q3 = s.quantile(0.25), s.quantile(0.5), s.quantile(0.75)
         iqr = q3 - q1
-        li, ls = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-        n_out = int(((s < li) | (s > ls)).sum())
-        ui.label(f"Outliers: {n_out}  |  IQR: [{li:,.2f}, {ls:,.2f}]").classes("font-semibold")
+
+        if metodo.value == "IQR":
+            li, ls = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+            mask_out = (d[c] < li) | (d[c] > ls)
+            desc = f"Límites IQR: [{li:,.2f}, {ls:,.2f}]  (Q1-1.5·IQR, Q3+1.5·IQR)"
+        else:  # Z-Score
+            mu, sigma = s.mean(), s.std()
+            umbral = 3.0
+            if sigma == 0 or pd.isna(sigma):
+                mask_out = pd.Series(False, index=d.index)
+                desc = "Desviación estándar = 0; no se pueden calcular Z-Scores."
+            else:
+                z = (d[c] - mu) / sigma
+                mask_out = z.abs() > umbral
+                li, ls = mu - umbral * sigma, mu + umbral * sigma
+                desc = (f"Media={mu:,.2f}  Desv={sigma:,.2f}  |Z|>{umbral:.0f}  "
+                        f"→ fuera de [{li:,.2f}, {ls:,.2f}]")
+
+        mask_out = mask_out.fillna(False)
+        n_out = int(mask_out.sum())
+
+        # Estadisticos / cuartiles
+        with ui.row().classes("gap-3 flex-wrap"):
+            for et, v in [("Q1 (25%)", q1), ("Q2 (mediana)", q2), ("Q3 (75%)", q3),
+                          ("IQR", iqr), ("Mín", s.min()), ("Máx", s.max())]:
+                with ui.card().classes("items-center p-2"):
+                    ui.label(f"{v:,.2f}").classes("font-bold")
+                    ui.label(et).classes("text-xs text-gray-500")
+
+        ui.label(f"Outliers detectados ({metodo.value}): {n_out}").classes("font-semibold mt-2")
+        ui.label(desc).classes("text-xs text-gray-500")
+
         ui.plotly(px.box(d, y=c, points="outliers", title=f"Boxplot de {c}")).classes("w-full")
 
-        def eliminar():
-            mask = ((d[c] >= li) & (d[c] <= ls)) | d[c].isna()
-            state.set_df(d[mask].reset_index(drop=True))
-            ui.notify(f"Eliminados {n_out} outliers de {c}.", type="positive")
-            panel.refresh()
-
+        # Listado de valores outliers
         if n_out > 0:
-            ui.button(f"Eliminar outliers de {c} (IQR)", on_click=eliminar)
+            out = d.loc[mask_out, [c]].copy()
+            if metodo.value == "Z-Score" and s.std() not in (0, None) and not pd.isna(s.std()):
+                out["Z"] = ((d.loc[mask_out, c] - s.mean()) / s.std()).round(2)
+            out = out.reset_index().rename(columns={"index": "Fila"})
+            ui.label("Valores outliers (primeros 50)").classes("text-sm font-semibold mt-2")
+            ui.table.from_pandas(out.head(50)).classes("w-full")
+
+            def eliminar():
+                state.set_df(d.loc[~mask_out].reset_index(drop=True))
+                ui.notify(f"Eliminados {n_out} outliers de {c} ({metodo.value}).",
+                          type="positive")
+                panel.refresh()
+
+            ui.button(f"Eliminar outliers de {c} ({metodo.value})", on_click=eliminar)
 
     col.on_value_change(lambda: panel.refresh())
+    metodo.on_value_change(lambda: panel.refresh())
     panel()
 
 

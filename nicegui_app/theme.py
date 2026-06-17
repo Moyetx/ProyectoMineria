@@ -55,3 +55,23 @@ def selector(dark: ui.dark_mode):
 
     return ui.select(TEMAS, value=_tema_guardado(), label="Tema",
                      on_change=on_change).classes("w-full")
+
+
+def _icono_toggle(dark: ui.dark_mode) -> str:
+    # En oscuro mostramos un sol (para pasar a claro); en claro, una luna.
+    return "light_mode" if dark.value else "dark_mode"
+
+
+def boton_toggle(dark: ui.dark_mode):
+    """Boton compacto (para la cabecera) que alterna rapido entre Claro y Oscuro."""
+    btn = ui.button(icon=_icono_toggle(dark)).props("flat round color=white")
+
+    def toggle():
+        nuevo = "Claro" if dark.value else "Oscuro"
+        app.storage.user["tema"] = nuevo
+        aplicar(nuevo, dark)
+        btn.props(f"icon={_icono_toggle(dark)}")
+
+    btn.on("click", toggle)
+    btn.tooltip("Cambiar tema claro/oscuro")
+    return btn

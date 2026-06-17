@@ -39,7 +39,11 @@ def build_shell() -> None:
 
     with ui.header().classes("items-center justify-between"):
         ui.label("Sistema de Segmentación de Clientes").classes("text-lg font-bold")
-        ui.label(state.estado_dataset_texto())
+        with ui.row().classes("items-center gap-3"):
+            # Estado del dataset (se mantiene actualizado con un timer)
+            lbl_estado_top = ui.label()
+            # Boton rapido de tema claro/oscuro (arriba a la derecha)
+            theme.boton_toggle(dark)
 
     with ui.left_drawer().classes("gap-2") as drawer:
         # Perfil del usuario
@@ -63,7 +67,17 @@ def build_shell() -> None:
 
         ui.separator()
         ui.label("Estado").classes("text-xs font-semibold")
-        ui.label(state.estado_dataset_texto()).classes("text-xs text-gray-600")
+        lbl_estado_drawer = ui.label().classes("text-xs text-gray-600")
+
+    # Mantiene vivos los dos indicadores de estado (cabecera y drawer).
+    # Los labels eran estaticos: por eso seguian diciendo "Sin datos cargados".
+    def _refrescar_estado():
+        txt = state.estado_dataset_texto()
+        lbl_estado_top.set_text(txt)
+        lbl_estado_drawer.set_text(txt)
+
+    _refrescar_estado()
+    ui.timer(1.0, _refrescar_estado)
 
     @ui.refreshable
     def contenido():

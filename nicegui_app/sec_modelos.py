@@ -7,10 +7,17 @@ Al entrenar cada modelo se calculan TRES metricas de evaluacion:
   - Davies-Bouldin Index  (mas bajo es mejor)
   - Calinski-Harabasz     (mas alto es mejor)
 Se guardan en el estado para mostrarse en la seccion de Evaluacion.
+
+NOTA DE RENDIMIENTO
+===================
+Los calculos pesados (varios K-Means para el codo, linkage del dendrograma,
+entrenamiento y metricas) se ejecutan con `run.io_bound`, es decir, en un hilo
+aparte. Asi NO bloquean el bucle de eventos de NiceGUI y la conexion con el
+navegador no se cae ("conexion perdida, reintentando").
 """
 
 import plotly.graph_objects as go
-from nicegui import ui
+from nicegui import run, ui
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.metrics import (
@@ -43,6 +50,40 @@ def _metricas(X, labels) -> dict:
         "davies_bouldin": round(float(davies_bouldin_score(X, labels)), 4),
         "calinski_harabasz": round(float(calinski_harabasz_score(X, labels)), 1),
     }
+
+
+# --------------------------------------------------------------------------- helpers
+async def _con_spinner(mensaje: str, func, *args):
+    """Ejecuta `func(*args)` en un hilo aparte mostrando un spinner mientras tanto."""
+    noti = ui.notification(mensaje, spinner=True, timeout=None, type="ongoing")
+    try:
+        return await run.io_bound(func, *args)
+    finally:
+        noti.dismiss()
+
+
+# Funciones SINCRONAS pesadas (se corren en hilo via run.io_bound; sin tocar la UI)
+def _codo_sync(X, ks):
+    inertias, sils = [], []
+    for k in ks:
+        km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X)
+        inertias.append(float(km.inertia_))
+        sils.append(float(silhouette_score(X, km.labels_)))
+    return inertias, sils
+
+
+def _kmeans_sync(X, k):
+    km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X)
+    return km.labels_, _metricas(X, km.labels_)
+
+
+def _linkage_sync(values, metodo):
+    return linkage(values, method=metodo)
+
+
+def _agg_sync(X_h, k, metodo):
+    labels = AgglomerativeClustering(n_clusters=k, linkage=metodo).fit_predict(X_h)
+    return labels, _metricas(X_h, labels)
 
 
 def render() -> None:
@@ -91,13 +132,10 @@ def _kmeans(X):
         f2.update_layout(title="Silhouette vs K", xaxis_title="K", yaxis_title="Silhouette")
         ui.plotly(f2).classes("w-full")
 
-    def calcular_codo():
+    async def calcular_codo():
         ks = list(range(rango["min"], rango["max"] + 1))
-        inertias, sils = [], []
-        for k in ks:
-            km = KMeans(n_clusters=k, random_state=42, n_init=10).fit(X)
-            inertias.append(km.inertia_)
-            sils.append(silhouette_score(X, km.labels_))
+        inertias, sils = await _con_spinner(
+            "Calculando método del codo...", _codo_sync, X, ks)
         state.pipe()["codo"] = {"ks": ks, "inertias": inertias, "silhouettes": sils}
         graficos_codo.refresh()
         ui.notify("Método del codo calculado.", type="positive")
@@ -108,11 +146,11 @@ def _kmeans(X):
     ui.separator()
     k_def = ui.number("K definitivo", value=4, min=2, max=20).classes("w-32")
 
-    def entrenar():
-        km = KMeans(n_clusters=int(k_def.value), random_state=42, n_init=10).fit(X)
-        m = _metricas(X, km.labels_)
+    async def entrenar():
+        labels, m = await _con_spinner(
+            "Entrenando K-Means...", _kmeans_sync, X, int(k_def.value))
         p = state.pipe()
-        p["labels_kmeans"] = (X.index, km.labels_)
+        p["labels_kmeans"] = (X.index, labels)
         p["modelo_activo"] = "kmeans"
         p["resultados"]["kmeans"] = {"k": int(k_def.value), "n_muestras": len(X), **m}
         ui.notify(
@@ -150,8 +188,9 @@ def _jerarquico(X):
             plt.title(f"Dendrograma (linkage={dd['linkage']})")
             plt.xlabel("Muestras (truncado)"); plt.ylabel("Distancia")
 
-    def render_dendro():
-        Z = linkage(X_h.values, method=metodo.value)
+    async def render_dendro():
+        Z = await _con_spinner(
+            "Calculando dendrograma...", _linkage_sync, X_h.values, metodo.value)
         state.pipe()["dendro"] = {"Z": Z, "linkage": metodo.value}
         dendro_panel.refresh()
 
@@ -161,10 +200,10 @@ def _jerarquico(X):
     ui.separator()
     n_clusters = ui.number("Número de clústers (corte)", value=4, min=2, max=20).classes("w-40")
 
-    def entrenar():
-        modelo = AgglomerativeClustering(n_clusters=int(n_clusters.value), linkage=metodo.value)
-        labels = modelo.fit_predict(X_h)
-        m = _metricas(X_h, labels)
+    async def entrenar():
+        labels, m = await _con_spinner(
+            "Entrenando Clustering Jerárquico...",
+            _agg_sync, X_h, int(n_clusters.value), metodo.value)
         p = state.pipe()
         p["labels_jerarquico"] = (X_h.index, labels)
         p["modelo_activo"] = "jerarquico"

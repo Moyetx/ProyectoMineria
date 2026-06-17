@@ -20,6 +20,8 @@ import os
 # La base de datos se crea junto al proyecto.
 DB_PATH = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent))) / "usuarios.db"
 
+# Asegura que el directorio destino exista (p.ej. el volumen /data en Railway).
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 def get_connection() -> sqlite3.Connection:
     """Devuelve una conexion SQLite con filas accesibles por nombre de columna."""

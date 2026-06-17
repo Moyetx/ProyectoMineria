@@ -49,7 +49,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     import os
     ui.run(
         title="Segmentación de Clientes",
-        storage_secret=os.environ.get("STORAGE_SECRET", "dev-secret-local")
+        storage_secret=os.environ.get("STORAGE_SECRET", "dev-secret-local"),
         reload=False,
         host = "0.0.0.0",
         port=int(os.environ.get("PORT", 8080)),

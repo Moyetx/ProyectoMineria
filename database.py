@@ -15,6 +15,7 @@ solo hay operaciones CRUD puras sobre SQLite.
 import sqlite3
 from pathlib import Path
 from typing import Optional, Dict, Any
+import os
 
 # La base de datos se crea junto al proyecto.
 DB_PATH = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent))) / "usuarios.db"

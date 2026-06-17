@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 # La base de datos se crea junto al proyecto.
-DB_PATH = Path(__file__).parent / "usuarios.db"
+DB_PATH = Path(os.environ.get("DATA_DIR", str(Path(__file__).parent))) / "usuarios.db"
 
 
 def get_connection() -> sqlite3.Connection:

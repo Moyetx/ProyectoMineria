@@ -137,9 +137,15 @@ def _form_registro(ast, refresh):
         foto_holder = {"bytes": None}
         ui.label("Foto de perfil (png/jpg)").classes("text-sm")
 
-        def on_upload(e):
-            foto_holder["bytes"] = e.content.read()
-            ui.notify(f"Foto cargada: {e.name}", type="positive")
+        async def on_upload(e):
+            # Compatible con NiceGUI 3.x (e.file + read async) y 2.x (e.content).
+            if hasattr(e, "file"):
+                foto_holder["bytes"] = await e.file.read()
+                nombre_archivo = e.file.name
+            else:
+                foto_holder["bytes"] = e.content.read()
+                nombre_archivo = e.name
+            ui.notify(f"Foto cargada: {nombre_archivo}", type="positive")
 
         ui.upload(on_upload=on_upload, auto_upload=True).props(
             'accept=".png,.jpg,.jpeg"'

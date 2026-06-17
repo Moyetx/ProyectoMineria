@@ -45,7 +45,7 @@ def build_shell() -> None:
             # Boton rapido de tema claro/oscuro (arriba a la derecha)
             theme.boton_toggle(dark)
 
-    with ui.left_drawer().classes("gap-2") as drawer:
+    with ui.left_drawer().classes("gap-2") :
         # Perfil del usuario
         if user.get("foto"):
             ui.image(user["foto"]).classes("w-24 h-24 rounded-full mx-auto object-cover")

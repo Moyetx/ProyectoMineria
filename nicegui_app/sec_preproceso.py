@@ -145,7 +145,7 @@ def _seccion_duplicados(refresh):
 # --------------------------------------------------------------------------- codificacion
 def _seccion_codificacion(refresh):
     df = state.get_df()
-    cols_obj = df.select_dtypes(include=["object", "category"]).columns.tolist()
+    cols_obj = df.select_dtypes(include=["object", "string", "category"]).columns.tolist()
     if not cols_obj:
         ui.label("No hay columnas categóricas.").classes("text-gray-500"); return
 

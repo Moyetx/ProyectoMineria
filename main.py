@@ -46,9 +46,11 @@ async def index(client):
 # En produccion, cargala desde una variable de entorno.
 # El guard permite importar este modulo (p.ej. en tests) sin levantar el server.
 if __name__ in {"__main__", "__mp_main__"}:
+    import os
     ui.run(
         title="Segmentación de Clientes",
-        storage_secret="cambia-esta-clave-secreta-en-produccion",
+        storage_secret=os.environ.get("STORAGE_SECRET", "dev-secret-local")
         reload=False,
-        port=8080,
+        host = "0.0.0.0",
+        port=int(os.environ.get("PORT", 8080)),
     )

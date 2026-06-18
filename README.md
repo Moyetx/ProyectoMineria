@@ -1,4 +1,4 @@
-# 🛍️ Sistema de Segmentación Inteligente de Clientes
+#  Sistema de Segmentación Inteligente de Clientes
 
 Aplicación web (Streamlit) que implementa un **pipeline completo de clustering**
 para descubrir segmentos de clientes orientados a estrategias de marketing.
@@ -10,7 +10,7 @@ para descubrir segmentos de clientes orientados a estrategias de marketing.
 
 ---
 
-## 🚀 Instalación y ejecución
+##  Instalación y ejecución
 
 El proyecto incluye **dos interfaces equivalentes**: **NiceGUI** (recomendada,
 pura Python con look de aplicación) y **Streamlit** (alternativa clásica).
@@ -40,7 +40,7 @@ pytest -q          # smoke tests: login + recorrido de las 6 secciones
 
 ---
 
-## 🔐 Acceso
+##  Acceso
 
 La aplicación está **bloqueada tras una compuerta de autenticación**. Debes:
 
@@ -57,7 +57,7 @@ También hay flujo de **recuperación de contraseña** mediante token.
 
 ---
 
-## 🧭 Pipeline (secciones de la app)
+##  Pipeline (secciones de la app)
 
 | # | Sección | Qué hace |
 |---|---------|----------|
@@ -68,13 +68,13 @@ También hay flujo de **recuperación de contraseña** mediante token.
 | 5 | **Evaluación** | **Silhouette Score** + tabla comparativa de modelos. |
 | 6 | **Visualización y Exportación** | Proyección **PCA** 2D/3D, perfilado por clúster, **Radar Chart** de centroides y descarga del CSV con la columna `Cluster`. |
 
-> ⚠️ El clustering jerárquico aplica **muestreo automático de máx. 2,000 filas**
+>  El clustering jerárquico aplica **muestreo automático de máx. 2,000 filas**
 > para el dendrograma y el entrenamiento, evitando `MemoryError` en datasets
 > grandes (requisito de la especificación).
 
 ---
 
-## 🗂️ Estructura del proyecto
+##  Estructura del proyecto
 
 ```
 ProyectoMineria/
@@ -108,7 +108,7 @@ ProyectoMineria/
 
 ---
 
-## 🧠 Manejo de estado (que el dataset no se reinicie)
+##  Manejo de estado (que el dataset no se reinicie)
 
 - **NiceGUI** (`nicegui_app/state.py`): el estado del pipeline vive en
   `app.storage.tab` (memoria del servidor, por pestaña), que **puede guardar el
@@ -119,7 +119,7 @@ ProyectoMineria/
   interacción, por eso todo se centraliza en `st.session_state`. Cada
   transformación lee con `state.get_df()` y escribe con `state.set_df()`.
 
-## ☁️ Despliegue
+##  Despliegue
 
 - **NiceGUI** → Hugging Face Spaces (Docker), Render, Railway o cualquier VPS.
   Define `storage_secret` desde una variable de entorno y expón el puerto 8080.
